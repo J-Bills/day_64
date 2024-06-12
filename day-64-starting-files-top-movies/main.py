@@ -2,11 +2,12 @@ from flask import Flask, render_template, redirect, url_for, request
 from flask_bootstrap import Bootstrap5
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-from sqlalchemy import Integer, String, Float
+from sqlalchemy import Integer, String, Float, desc
 from flask_wtf import FlaskForm
-from wtforms import StringField, SubmitField,
+from wtforms import StringField, SubmitField
 from wtforms.validators import DataRequired
 import requests
+from os import environ
 
 class Base(DeclarativeBase):
   pass
@@ -30,24 +31,43 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = '8BYkEfBA6O6donzWlSihBXox7C0sKR6c'
 Bootstrap5(app)
 
+class SearchMovie():
+    api_key = environ.get('MOVIE_API_KEY')
+    api_rac = environ.get('MOVIE_API_RAC')
+    def __init__(self):
+        
+        pass
 
 class EditMovie(FlaskForm):
     rating = StringField('What is your rating out of 10?', validators=[DataRequired()])
     review = StringField('What is your review?', validators=[DataRequired()])
     submit = SubmitField('Done')
 
+
 class DeleteMovie(FlaskForm):
-    question
-    submit = SubmitField('Done')
+    back = SubmitField('Back')
+    delete = SubmitField('Delete')
+
+class AddMovie(FlaskForm):
+    movie_title = StringField('Title', validators=[DataRequired()])
+    submit = SubmitField('Add')
+
+
+@app.route('/')
+def index():
+    all_movies = Movie.query.order_by(desc(Movie.ranking)).all()
+    movie = all_movies[0]
+    return render_template("index.html", movie=movie)
 
 
 @app.route("/<id>")
 def home(id):
-    result = db.session.execute(db.select(Movie).order_by(Movie.ranking))
-    all_movies = result.scalars().all()
+    all_movies = Movie.query.order_by(desc(Movie.ranking)).all()
     count = int(id) - 1
     movie = all_movies[count]
+    print(movie.title)
     return render_template("index.html", movie=movie)
+
 
 @app.route("/edit/<id>", methods=['GET', 'POST'])
 def update_movie(id):
@@ -61,36 +81,41 @@ def update_movie(id):
             updated_movie.rating = rating
             updated_movie.review = review
             db.session.commit()
-            # id = int(movie_id) - 1
         return redirect(url_for('home', id=movie_id))
     movie_id = id
     updated_movie = db.get_or_404(Movie, movie_id)
     return render_template("edit.html", movie=updated_movie, form=update_form)
-@app.route("/delete")
-def delete_movie():
+
+
+@app.route("/delete/<id>", methods=['GET', 'POST'])
+def delete_movie(id):
     delete_form = DeleteMovie()
-    if request.method == 'POST' and delete_form.validate_on_submit():
-        with app.app_context():
-            movie_id = id
-            rating = delete_form.rating.data
-            review = delete_form.review.data
-            updated_movie = db.get_or_404(Movie, movie_id)
-            updated_movie.rating = rating
-            updated_movie.review = review
-            db.session.commit()
-            # id = int(movie_id) - 1
-        return redirect(url_for('home', id=movie_id))
     movie_id = id
-    updated_movie = db.get_or_404(Movie, movie_id)
-    return render_template("edit.html", movie=updated_movie, form=delete_form)
+    if request.method == 'POST' and delete_form.validate_on_submit() and delete_form.delete.data:
+        with app.app_context():
+            movie_to_delete = db.get_or_404(Movie, movie_id)
+            db.session.delete(movie_to_delete)
+            db.session.commit()
+        return redirect(url_for('index'))
 
-    return render_template("delete.html", all_movies=all_movies)
-@app.route("/add")
+    elif delete_form.back.data:
+        return redirect(url_for('home', id=movie_id))
+
+    movie_to_delete = db.get_or_404(Movie, movie_id)
+    return render_template("delete.html", movie=movie_to_delete, form=delete_form)
+
+
+@app.route("/add", methods=['GET', 'POST'])
 def add_movie():
-    result = db.session.execute(db.select(Movie).order_by(Movie.title))
-    all_movies = result.scalars().all()
+    add_form = AddMovie()
+    if request.method == "POST" and add_form.validate_on_submit():
+        with app.app_context():
+            movie_title = add_form.movie_title.data
+            db.session.add(Movie(title=movie_title))
+            db.session.commit()
 
-    return render_template("add.html", all_movies=all_movies)
+
+    return render_template("add.html")
 
 
 
